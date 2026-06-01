@@ -28,7 +28,7 @@
 
 LOG_MODULE_REGISTER(a320, CONFIG_A320_LOG_LEVEL);
 
-/* ========= ⭐ A320 专用 Work Queue ========= */
+/* ========= ⭐ A320  Work Queue ========= */
 #define A320_WORKQ_STACK_SIZE 2048
 #define A320_WORKQ_PRIORITY 5
 
@@ -38,9 +38,6 @@ static struct k_mutex a320_i2c_mutex;
 K_THREAD_STACK_DEFINE(a320_workq_stack, A320_WORKQ_STACK_SIZE);
 static struct k_work_q a320_workq;
 
-/* ========================================================================= */
-/* 鼠标与滚轮可调参数 (已映射至 Kconfig，用户可在 .conf 中配置)                 */
-/* ========================================================================= */
 
 // --- 滚轮方向配置 ---
 #define SCROLL_X_DIR (-CONFIG_A320_SCROLL_X_DIR)
@@ -58,11 +55,10 @@ static struct k_work_q a320_workq;
 #define ARROW_DIVISOR_SLOW CONFIG_A320_SCROLL_DIVISOR_SLOW
 #define ARROW_DIVISOR_FAST CONFIG_A320_SCROLL_DIVISOR_FAST
 
-// --- 防误触锁定比例配置 ---
 #define DOMINANT_NUMERATOR CONFIG_A320_DOMINANT_NUMERATOR
 #define DOMINANT_DENOMINATOR CONFIG_A320_DOMINANT_DENOMINATOR
 
-// --- 鼠标指针基础配置 (Kconfig 为整数百分比，这里除以 100 转为浮点数) ---
+// --- Mouse base setting (Kconfig 为整数百分比，这里除以 100 转为浮点数) ---
 #define MOUSE_BASE_SPEED (CONFIG_A320_MOUSE_BASE_SPEED_PERCENT / 100.0f)
 #define MOUSE_SENS_BASE (CONFIG_A320_MOUSE_SENS_BASE_PERCENT / 100.0f)
 #define MOUSE_SENS_STEP (CONFIG_A320_MOUSE_SENS_STEP_PERCENT / 100.0f)
@@ -73,7 +69,7 @@ static struct k_work_q a320_workq;
 #define MOTION_GPIO_PIN 8
 #define MOTION_GPIO_FLAGS (GPIO_ACTIVE_LOW | GPIO_PULL_UP)
 
-/* ========= A320 常量 ========= */
+/* ========= A320 parameter ========= */
 #define A320_I2C_ADDR 0x3B
 #define A320_PACKET_LEN 3
 
@@ -84,7 +80,7 @@ static float scroll_residual_x = 0;
 static float scroll_residual_y = 0;
 static uint32_t last_activity_time = 0;
 #define A320_WDT_TIMEOUT 200
-/* ========= 全局状态 ========= */
+/* ========= global ========= */
 static bool scroll_key_pressed = false;
 static bool arrow_key_pressed = false;
 static bool slow_key_pressed = false;
@@ -110,7 +106,7 @@ static int hid_indicators_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(a320_hid_listener, hid_indicators_listener);
 ZMK_SUBSCRIPTION(a320_hid_listener, zmk_hid_indicators_changed);
 
-/* ========= Space + Slow 按键监听 ========= */
+/* ========= Space + Slow Key listener ========= */
 static int special_key_listener_cb(const zmk_event_t *eh) {
     const struct zmk_position_state_changed *ev = as_zmk_position_state_changed(eh);
     if (!ev)
@@ -126,7 +122,6 @@ static int special_key_listener_cb(const zmk_event_t *eh) {
         LOG_INF("space position=49 %s", scroll_key_pressed ? "PRESSED" : "RELEASED");
     }
 
-    // ★ NEW: Slow key
     if (ev->position == 22) {
         slow_key_pressed = ev->state;
         LOG_INF("slow_key position=37 %s", slow_key_pressed ? "PRESSED" : "RELEASED");
@@ -154,7 +149,6 @@ struct a320_data {
     int16_t arrow_residue_y;
 };
 
-/* ========= I2C 读取（加锁版） ========= */
 static int a320_read_packet(const struct device *dev, int8_t *dx, int8_t *dy) {
     const struct a320_config *cfg = dev->config;
     uint8_t buf[A320_PACKET_LEN] = {0};
@@ -180,12 +174,10 @@ out:
     return ret;
 }
 
-/* ========= ★ 抽象复用：滚轮单轴处理函数 ========= */
 static inline void process_scroll_axis(const struct device *dev, int8_t delta, int16_t *residue,
                                        uint16_t input_code, int8_t dir_mult) {
     int abs_delta = abs(delta);
 
-    // ★ 不清零，保持连续性
     if (abs_delta <= SCROLL_DEADZONE) {
         return;
     }
@@ -194,7 +186,6 @@ static inline void process_scroll_axis(const struct device *dev, int8_t delta, i
         abs_delta = SCROLL_INPUT_MAX;
     }
 
-    // ★ 非线性 divisor（更丝滑）
     float t = (float)abs_delta / SCROLL_INPUT_MAX;
     t = t * t;
 
@@ -212,7 +203,6 @@ static inline void process_scroll_axis(const struct device *dev, int8_t delta, i
         *residue %= divisor;
     }
 
-    // ★ 阻尼（关键）
     *residue = (*residue * 3) / 4;
 }
 
@@ -229,7 +219,7 @@ static inline void process_arrow_axis(const struct device *dev, int8_t delta, in
         abs_delta = ARROW_INPUT_MAX;
     }
 
-    // ★ 非线性 divisor（更丝滑）
+    
     float t = (float)abs_delta / SCROLL_INPUT_MAX;
     t = t * t;
 
@@ -239,7 +229,7 @@ static inline void process_arrow_axis(const struct device *dev, int8_t delta, in
     if (divisor < 1)
         divisor = 1;
 
-    *residue += delta; // 替换掉 dir_mult
+    *residue += delta; 
     int16_t arrow_ticks = *residue / divisor;
     if (arrow_ticks != 0) {
         uint16_t key = (arrow_ticks > 0) ? key_pos : key_neg;
@@ -251,7 +241,6 @@ static inline void process_arrow_axis(const struct device *dev, int8_t delta, in
         *residue %= divisor;
     }
 
-    // 阻尼（防止漂移）
     *residue = (*residue * 3) / 4;
 }
 
@@ -309,7 +298,7 @@ static void a320_work_cb(struct k_work *work) {
         touched = true;
     }
 
-    /* ========= ⭐ TOUCH RELEASE 判定（关键修复） ========= */
+    /* ========= ⭐ TOUCH RELEASE  ========= */
     if (!got_data) {
         if (now - last_touch_time > TOUCH_IDLE_TIMEOUT) { // 30~80ms 可调
             touched = false;
@@ -399,7 +388,6 @@ static void motion_isr(const struct device *port, struct gpio_callback *cb, uint
 
     last_activity_time = k_uptime_get_32();
 
-    /* ⭐ 防止 work 堆积 */
     k_work_submit_to_queue(&a320_workq, &data->work);
 }
 
@@ -415,7 +403,7 @@ static void a320_enable_irq_work_cb(struct k_work *work) {
 
     LOG_INF("A320 IRQ enabled (delayed)");
 }
-/* ========= 初始化 ========= */
+/* ========= Inital ========= */
 static int a320_init(const struct device *dev) {
     const struct a320_config *cfg = dev->config;
     struct a320_data *data = dev->data;
@@ -425,14 +413,14 @@ static int a320_init(const struct device *dev) {
     if (!gpio_is_ready_dt(&cfg->motion_gpio))
         return -ENODEV;
 
-    /* ⭐ 初始化 mutex */
+    /* ⭐ Init mutex */
     k_mutex_init(&a320_i2c_mutex);
 
     data->dev = dev;
 
     k_work_init(&data->work, a320_work_cb);
 
-    /* ⭐ 启动 workqueue */
+    /* ⭐ Init workqueue */
     k_work_queue_start(&a320_workq, a320_workq_stack, K_THREAD_STACK_SIZEOF(a320_workq_stack),
                        A320_WORKQ_PRIORITY, NULL);
 
