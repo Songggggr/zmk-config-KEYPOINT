@@ -172,7 +172,7 @@ layers:
   - ''
   - ''
   MOUSE:
-  - ESC
+  - TAB
   - Q
   - W
   - E
@@ -219,8 +219,8 @@ layers:
   - LALT
   - ''
   - RAISE
+  - SPACE
   - '&mkp MB1'
-  - LOWER
   - '&mkp MB1'
   - '&tdRMCLK'
   - RAISE
