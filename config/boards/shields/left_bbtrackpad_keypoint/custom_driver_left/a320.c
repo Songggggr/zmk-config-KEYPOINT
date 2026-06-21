@@ -122,9 +122,9 @@ static int special_key_listener_cb(const zmk_event_t *eh) {
         LOG_INF("space position=49 %s", scroll_key_pressed ? "PRESSED" : "RELEASED");
     }
 
-    if (ev->position == 22) {
+    if (ev->position == 12) {
         slow_key_pressed = ev->state;
-        LOG_INF("slow_key position=37 %s", slow_key_pressed ? "PRESSED" : "RELEASED");
+        LOG_INF("slow_key position=12 %s", slow_key_pressed ? "PRESSED" : "RELEASED");
     }
 
     return 0;
